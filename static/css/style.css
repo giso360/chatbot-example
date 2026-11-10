@@ -253,6 +253,32 @@ dialog p strong { color: var(--text); font-weight: 600; }
 }
 .chip:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
 
+/* ---------- Robot animation ---------- */
+.robot-hero { display: grid; place-items: center; margin: 0 auto 12px; }
+.robot-hero svg { overflow: visible; }
+.robot-body { animation: robot-float 3s ease-in-out infinite; transform-origin: 40px 80px; }
+.r-head { fill: var(--accent); }
+.r-torso { fill: var(--accent-hover); }
+.r-face { fill: var(--surface); }
+.r-eye, .r-eye-a { fill: var(--text); transform-box: fill-box; transform-origin: center; animation: robot-blink 4.5s infinite; }
+.r-eye-a { fill: #1a1d23; }
+.r-mouth { stroke: var(--text); }
+.r-stroke { stroke: var(--accent); }
+.r-stroke-w { stroke: #fff; }
+.r-antenna { fill: #f59e0b; animation: robot-pulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.r-arm-r { transform-box: fill-box; transform-origin: 50% 10%; animation: robot-wave 2.4s ease-in-out infinite; }
+.r-arm-l { transform-box: fill-box; transform-origin: 50% 10%; animation: robot-sway 3s ease-in-out infinite; }
+.msg.assistant .avatar.robot { animation: robot-float 3s ease-in-out infinite; }
+
+@keyframes robot-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes robot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes robot-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .6; } }
+@keyframes robot-wave { 0%, 55%, 100% { transform: rotate(0); } 15%, 35% { transform: rotate(-35deg); } 25%, 45% { transform: rotate(-12deg); } }
+@keyframes robot-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .robot-body, .r-eye, .r-eye-a, .r-antenna, .r-arm-r, .r-arm-l, .msg.assistant .avatar.robot { animation: none; }
+}
+
 .messages { display: flex; flex-direction: column; gap: 22px; padding-bottom: 12px; }
 
 .msg { display: flex; gap: 12px; animation: fade-up .25s ease both; }

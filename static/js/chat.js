@@ -132,6 +132,11 @@
   const scrollDown = () => { chat.scrollTop = chat.scrollHeight; };
   const nearBottom = () => chat.scrollHeight - chat.scrollTop - chat.clientHeight < 140;
 
+  const AVATAR_ROBOT =
+    '<svg viewBox="0 0 40 40" width="22" height="22"><line class="r-stroke-w" x1="20" y1="3" x2="20" y2="8" stroke-width="2" stroke-linecap="round"/>' +
+    '<circle class="r-antenna" cx="20" cy="3.5" r="2.2"/><rect x="5" y="8" width="30" height="24" rx="8" fill="#fff"/>' +
+    '<ellipse class="r-eye-a" cx="14" cy="20" rx="3" ry="3.6"/><ellipse class="r-eye-a" cx="26" cy="20" rx="3" ry="3.6"/></svg>';
+
   function addMessage(role, content) {
     welcome.hidden = true;
     const wrap = document.createElement("div");
@@ -140,7 +145,8 @@
     if (role === "assistant") {
       const avatar = document.createElement("div");
       avatar.className = "avatar";
-      avatar.textContent = "AI";
+      avatar.classList.add("robot");
+      avatar.innerHTML = AVATAR_ROBOT;
       avatar.setAttribute("aria-hidden", "true");
       wrap.appendChild(avatar);
     }
