@@ -1,0 +1,28 @@
+{% extends "auth_base.html" %}
+{% block title %}Sign up{% endblock %}
+{% block heading %}Create your account{% endblock %}
+{% block subheading %}Your chats are private to your account.{% endblock %}
+
+{% block form %}
+<form class="auth-form" method="post" action="{{ url_for('signup') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+
+  <label for="name">Name</label>
+  <input id="name" name="name" type="text" value="{{ form.name }}" maxlength="60" autocomplete="name" required autofocus>
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" minlength="{{ min_password }}" maxlength="128" autocomplete="new-password" required aria-describedby="pw-hint">
+  <span class="auth-hint" id="pw-hint">At least {{ min_password }} characters.</span>
+
+  <label for="confirm">Confirm password</label>
+  <input id="confirm" name="confirm" type="password" maxlength="128" autocomplete="new-password" required>
+
+  <button class="auth-submit" type="submit">Sign up</button>
+</form>
+{% endblock %}
+
+{% block switch %}Already have an account? <a href="{{ url_for('login', next=next_url or None) }}">Log in</a>{% endblock %}

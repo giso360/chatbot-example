@@ -1,0 +1,20 @@
+# On EC2: no credentials needed here, the instance's IAM role is picked up automatically.
+# For local testing: set AWS_PROFILE (or AWS_ACCESS_KEY_ID/SECRET/SESSION_TOKEN) in your shell,
+# and uncomment the ~/.aws mount below.
+services:
+  chat:
+    build: .
+    image: bedrock-chat:latest
+    ports:
+      - "8000:8000"
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-opus-4-6-v1}
+      # AWS_PROFILE: ${AWS_PROFILE:-}
+    volumes:
+      - chat-data:/data
+      # - ~/.aws:/home/app/.aws:ro   # local testing only (see note in DEPLOY.md)
+    restart: unless-stopped
+
+volumes:
+  chat-data:

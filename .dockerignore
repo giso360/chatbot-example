@@ -1,0 +1,14 @@
+.venv
+.git
+.claude
+__pycache__
+*.pyc
+instance
+*.db
+*.db-wal
+*.db-shm
+test_bedrock.py
+Dockerfile
+docker-compose.yml
+.dockerignore
+DEPLOY.md

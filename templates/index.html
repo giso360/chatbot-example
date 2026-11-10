@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bedrock Chat</title>
+  <meta name="description" content="A general-purpose chat assistant powered by Amazon Bedrock.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash. */
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("theme"); } catch (e) {}
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+</head>
+<body>
+  <div class="layout" id="layout" data-sidebar="open">
+
+    <!-- ===== Sidebar: chat history ===== -->
+    <aside class="sidebar" id="sidebar" aria-label="Chat history">
+      <div class="side-head">
+        <a class="brand" href="/" id="brand-link" aria-label="Bedrock Chat home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg>
+          </span>
+          <span class="brand-name">Bedrock Chat</span>
+        </a>
+        <button class="icon-btn" id="sidebar-close" type="button" aria-label="Close sidebar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+      </div>
+
+      <div class="side-actions">
+        <button class="new-chat" id="new-chat" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          New chat
+        </button>
+        <div class="search">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <label for="search" class="sr-only">Search chats</label>
+          <input id="search" type="search" placeholder="Search chats" autocomplete="off">
+        </div>
+      </div>
+
+      <nav class="history" id="history" aria-label="Previous chats"></nav>
+
+      <div class="side-foot">
+        <span class="model-chip" title="Model · region">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="model-text">{{ model_id }} &middot; {{ region }}</span>
+        </span>
+        <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
+          <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+      </div>
+      <div class="user-row">
+        <span class="user-avatar" aria-hidden="true">{{ user.name[:1]|upper }}</span>
+        <div class="user-meta">
+          <div class="user-name">{{ user.name }}</div>
+          <div class="user-email" title="{{ user.email }}">{{ user.email }}</div>
+        </div>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="icon-btn" type="submit" aria-label="Log out" title="Log out">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
+        </form>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <!-- ===== Main column ===== -->
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn" id="sidebar-toggle" type="button" aria-label="Open sidebar" aria-controls="sidebar" aria-expanded="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+        <h1 class="chat-title" id="chat-title">New chat</h1>
+        <button class="icon-btn top-new" id="top-new" type="button" aria-label="New chat" title="New chat">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </header>
+
+      <main class="chat" id="chat" aria-live="polite">
+        <div class="chat-inner">
+          <section class="welcome" id="welcome">
+            <div class="welcome-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg>
+            </div>
+            <h2>How can I help you today?</h2>
+            <p>Ask a question, brainstorm ideas, draft text or debug code.</p>
+            <div class="suggestions">
+              <button type="button" class="chip" data-prompt="Explain how DNS works in simple terms.">Explain how DNS works</button>
+              <button type="button" class="chip" data-prompt="Write a Python function that checks whether a string is a palindrome.">Write a Python palindrome check</button>
+              <button type="button" class="chip" data-prompt="Give me a 3-day itinerary for a trip to Lisbon.">Plan a trip to Lisbon</button>
+              <button type="button" class="chip" data-prompt="Help me write a polite email asking for a deadline extension.">Draft a polite email</button>
+            </div>
+          </section>
+          <div class="messages" id="messages"></div>
+        </div>
+      </main>
+
+      <footer class="composer-wrap">
+        <div class="banner" id="banner" role="alert" hidden>
+          <span id="banner-text"></span>
+          <button type="button" id="banner-close" class="banner-close" aria-label="Dismiss">&times;</button>
+        </div>
+        <form class="composer" id="composer" autocomplete="off">
+          <label for="input" class="sr-only">Message</label>
+          <textarea id="input" rows="1" maxlength="8000" placeholder="Message the assistant…" autofocus></textarea>
+          <button class="btn-send" id="send" type="submit" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+          <button class="btn-send" id="stop" type="button" aria-label="Stop generating" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+        </form>
+        <p class="quota" id="quota" data-remaining="{{ quota.remaining }}" data-limit="{{ quota.limit }}"
+           data-exhausted-message="{{ limit_message }}"></p>
+        <p class="hint">Enter to send &middot; Shift+Enter for a new line. AI responses may be inaccurate.</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Row actions menu -->
+  <div class="menu" id="menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-action="rename">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Rename
+    </button>
+    <button type="button" role="menuitem" data-action="delete" class="danger">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
+      Delete
+    </button>
+  </div>
+
+  <!-- Delete confirmation -->
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h3 id="confirm-title">Delete chat?</h3>
+      <p>This will permanently delete <strong id="confirm-name"></strong>. This can't be undone.</p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn-plain">Cancel</button>
+        <button type="submit" value="ok" class="btn-danger">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
