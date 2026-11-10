@@ -257,18 +257,20 @@ dialog p strong { color: var(--text); font-weight: 600; }
 .robot-hero { display: grid; place-items: center; margin: 0 auto 12px; }
 .robot-hero svg { overflow: visible; }
 .robot-body { animation: robot-float 3s ease-in-out infinite; transform-origin: 40px 80px; }
-.r-head { fill: var(--accent); }
-.r-torso { fill: var(--accent-hover); }
+.robot { --robot: #ef4444; --robot-dark: #b91c1c; }
+.r-head { fill: var(--robot); }
+.r-torso { fill: var(--robot-dark); }
 .r-face { fill: var(--surface); }
 .r-eye, .r-eye-a { fill: var(--text); transform-box: fill-box; transform-origin: center; animation: robot-blink 4.5s infinite; }
 .r-eye-a { fill: #1a1d23; }
 .r-mouth { stroke: var(--text); }
-.r-stroke { stroke: var(--accent); }
+.r-stroke { stroke: var(--robot); }
 .r-stroke-w { stroke: #fff; }
 .r-antenna { fill: #f59e0b; animation: robot-pulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 .r-arm-r { transform-box: fill-box; transform-origin: 50% 10%; animation: robot-wave 2.4s ease-in-out infinite; }
 .r-arm-l { transform-box: fill-box; transform-origin: 50% 10%; animation: robot-sway 3s ease-in-out infinite; }
 .msg.assistant .avatar.robot { animation: robot-float 3s ease-in-out infinite; }
+.avatar.robot { background: linear-gradient(135deg, var(--robot), var(--robot-dark)); }
 
 @keyframes robot-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes robot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
