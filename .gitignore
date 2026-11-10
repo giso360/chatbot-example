@@ -10,3 +10,6 @@ instance/
 .DS_Store
 .idea/
 .vscode/
+
+# Never commit SSH/PEM keys
+*.pem
