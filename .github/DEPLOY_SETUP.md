@@ -1,80 +1,36 @@
-# One-time setup for the GitHub Actions deployment
+# Deployment setup (no secrets)
 
-`.github/workflows/deploy.yml` runs on every push to `master`: build image -> push to ECR ->
-SSH to EC2 -> swap the container (with health check and automatic rollback).
-It opens SSH (port 22) in the security group **only for the runner's IP and only for the
-duration of the run**, then closes it again.
+`.github/workflows/deploy.yml` runs on every push to `master` on a **self-hosted GitHub Actions
+runner installed on the EC2 instance itself**. It checks out the code, builds the image locally
+and swaps the container (`scripts/deploy-local.sh`), with a health check and automatic rollback.
 
-## 1. AWS: let GitHub assume a role (OIDC, no stored AWS keys)
+Because the runner already lives on the server:
 
-Create the OIDC provider once per account (skip if it exists):
+- no AWS keys are stored anywhere (Bedrock access comes from the instance's IAM role),
+- no SSH key is needed and no security group rule has to be opened for GitHub,
+- no ECR push is needed (the image is built where it runs).
 
-- Provider URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
+## One-time runner registration (on the instance)
 
-Create an IAM role (e.g. `github-deploy-bedrock-chat`).
-
-**Trust policy**:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Federated": "arn:aws:iam::881490130721:oidc-provider/token.actions.githubusercontent.com" },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike":   { "token.actions.githubusercontent.com:sub": "repo:giso360/chatbot-example:ref:refs/heads/master" }
-    }
-  }]
-}
-```
-
-**Permissions policy:**
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    { "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*" },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"
-      ],
-      "Resource": "arn:aws:ecr:us-east-1:881490130721:repository/gskoufias-bedrock-chat"
-    },
-    { "Effect": "Allow", "Action": "ec2:DescribeInstances", "Resource": "*" },
-    {
-      "Effect": "Allow",
-      "Action": ["ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress"],
-      "Resource": "arn:aws:ec2:us-east-1:881490130721:security-group/sg-0ff54723d56f9d1db"
-    }
-  ]
-}
-```
-
-## 2. GitHub repository secrets (Settings -> Secrets and variables -> Actions)
-
-| Secret | Value |
-|---|---|
-| `AWS_ROLE_ARN` | ARN of the role above |
-| `EC2_SSH_PRIVATE_KEY` | full contents of `key-georges.pem` (including the BEGIN/END lines) |
-
-## 3. Push
+GitHub gives a short-lived registration token (valid 1 hour, single use; it is not a stored
+secret): repository -> Settings -> Actions -> Runners -> **New self-hosted runner** (Linux, x64)
+and copy the token from the `./config.sh --token ...` line. Then, on the instance:
 
 ```bash
-# (this folder is already a repository on branch master)
-# remote: https://github.com/giso360/chatbot-example
-git add . && git commit -m "Add CI/CD"
-git push origin master      # triggers the first deployment
+cd ~/actions-runner
+./config.sh --unattended --url https://github.com/giso360/chatbot-example --token <TOKEN> \
+            --labels bedrock-chat --name ec2-bedrock-chat --replace
+sudo ./svc.sh install ubuntu && sudo ./svc.sh start     # keeps it running across reboots
 ```
 
-## Notes
+The runner user (`ubuntu`) needs passwordless `sudo` for docker, which this instance already has.
 
-- Rollback: if the new container is not healthy within ~90 s, the script restores the previous
-  one and the workflow fails. A manual re-run is available from the Actions tab
-  (`workflow_dispatch`).
-- Each image is also tagged with the commit SHA, so you can redeploy an old version.
-- The first SSH connection to the instance trusts its host key on first use (`accept-new`).
+## Security notes
+
+- A self-hosted runner executes workflow code **on your server**. The workflow only triggers on
+  pushes to `master` and manual runs, never on pull requests. Keep it that way, and since the
+  repository is public, leave Settings -> Actions -> General -> *Fork pull request workflows*
+  on "Require approval".
+- Anyone who can push to `master` can run code on the instance. Protect the branch.
+- The instance is small (about 900 MB RAM): the build briefly competes with the running app.
+  Adding a 1 GB swap file avoids out-of-memory kills during builds.

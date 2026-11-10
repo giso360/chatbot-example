@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# Runs ON the EC2 instance (piped over SSH by .github/workflows/deploy.yml).
-#   usage: ECR_TOKEN=... remote-deploy.sh <image-uri> <aws-region>
-# Pulls the image, swaps the container, waits for it to be healthy and rolls back if it is not.
+# Runs ON the EC2 instance, from the GitHub Actions self-hosted runner's checkout.
+#   usage: scripts/deploy-local.sh <git-sha>
+# Builds the image from the checked-out code, swaps the container, waits until it is healthy
+# and rolls back to the previous container if it is not.
 set -euo pipefail
 
-IMAGE="$1"
-REGION="${2:-us-east-1}"
-REGISTRY="${IMAGE%%/*}"
+SHA="${1:-manual}"
 NAME=bedrock-chat
+IMAGE="bedrock-chat:${SHA:0:12}"
+REGION="${AWS_REGION:-us-east-1}"
 
-# Throw-away docker config so the ECR token is never stored on the instance.
-CFG="$(mktemp -d)"
-trap 'rm -rf "$CFG"' EXIT
-docker_() { sudo docker --config "$CFG" "$@"; }
+cd "$(dirname "$0")/.."
 
-echo "==> Pulling $IMAGE"
-printf '%s' "$ECR_TOKEN" | docker_ login --username AWS --password-stdin "$REGISTRY" >/dev/null
-docker_ pull "$IMAGE"
+echo "==> Building $IMAGE"
+sudo docker build -t "$IMAGE" -t bedrock-chat:latest .
 
 echo "==> Replacing container $NAME"
 sudo docker rm -f "${NAME}-old" >/dev/null 2>&1 || true
@@ -27,7 +24,8 @@ if sudo docker inspect "$NAME" >/dev/null 2>&1; then
   had_old=1
 fi
 
-# chat-data volume keeps the database (and the generated session secret) across deployments.
+# The chat-data volume keeps the database (and the generated session secret) across deployments.
+# AWS credentials are not passed in: boto3 uses the instance's IAM role.
 sudo docker run -d --name "$NAME" --restart unless-stopped \
   -p 8000:8000 -e AWS_REGION="$REGION" -v chat-data:/data "$IMAGE" >/dev/null
 
@@ -52,6 +50,6 @@ fi
 
 echo "==> Healthy"
 curl -fsS http://127.0.0.1:8000/health && echo
-# Drop images no container uses any more (the old container keeps its own image for rollback).
+# Drop images no container uses any more (the stopped old container keeps its image for rollback).
 sudo docker image prune -af >/dev/null
 sudo docker ps --format '{{.Names}}  {{.Image}}  {{.Status}}'

@@ -1,7 +1,10 @@
-name: Build and deploy to EC2
+name: Deploy to EC2
 
-# Every push to master builds the image, pushes it to ECR and replaces the container on EC2.
-# One-time setup (AWS role + GitHub secrets): see .github/DEPLOY_SETUP.md
+# Every push to master rebuilds the image and replaces the running container.
+#
+# This job runs on a self-hosted runner installed ON the EC2 instance, so it needs no secrets:
+# no AWS keys (Bedrock access comes from the instance's IAM role), no SSH key, no registry login.
+# Runner setup (one time): see .github/DEPLOY_SETUP.md
 on:
   push:
     branches: [master]
@@ -14,96 +17,15 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  id-token: write   # OIDC login to AWS, no long-lived AWS keys stored in GitHub
   contents: read
-
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: gskoufias-bedrock-chat
-  INSTANCE_ID: i-006be65db96a322f5
-  SSH_USER: ubuntu
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, bedrock-chat]
     timeout-minutes: 20
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Log in to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Look up the instance
-        id: instance
-        run: |
-          read -r IP SG <<< "$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[0].Instances[0].[PublicIpAddress,SecurityGroups[0].GroupId]' --output text)"
-          if [ -z "$IP" ] || [ "$IP" = "None" ]; then echo "::error::Instance has no public IP (is it running?)"; exit 1; fi
-          echo "ip=$IP" >> "$GITHUB_OUTPUT"
-          echo "sg=$SG" >> "$GITHUB_OUTPUT"
-
-      - name: Temporarily allow SSH from this runner
-        id: sg
-        run: |
-          RUNNER_IP="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
-          echo "cidr=${RUNNER_IP}/32" >> "$GITHUB_OUTPUT"
-          aws ec2 authorize-security-group-ingress --group-id "${{ steps.instance.outputs.sg }}" \
-            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${RUNNER_IP}/32,Description=github-actions-run-${{ github.run_id }}}]"
-          echo "opened=true" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy to EC2
-        env:
-          SSH_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          HOST: ${{ steps.instance.outputs.ip }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ConnectTimeout=20"
-
-          # Wait for the new security group rule to take effect and for sshd to answer.
-          for i in $(seq 1 12); do
-            ssh $SSH_OPTS "$SSH_USER@$HOST" true 2>/dev/null && break
-            [ "$i" = 12 ] && { echo "::error::Cannot SSH to $HOST"; exit 1; }
-            sleep 5
-          done
-
-          # First stdin line = short-lived ECR token (kept out of argv/ps); the rest = the script.
-          {
-            aws ecr get-login-password --region "$AWS_REGION"
-            cat scripts/remote-deploy.sh
-          } | ssh $SSH_OPTS "$SSH_USER@$HOST" \
-                'read -r ECR_TOKEN; export ECR_TOKEN; bash -s -- "'"$IMAGE"'" "'"$AWS_REGION"'"'
-
-      - name: Close the temporary SSH rule
-        if: always() && steps.sg.outputs.opened == 'true'
-        run: |
-          aws ec2 revoke-security-group-ingress --group-id "${{ steps.instance.outputs.sg }}" \
-            --protocol tcp --port 22 --cidr "${{ steps.sg.outputs.cidr }}"
-
-      - name: Remove SSH key from the runner
-        if: always()
-        run: rm -f ~/.ssh/deploy_key
+      - name: Build image and replace the container
+        run: bash scripts/deploy-local.sh "${{ github.sha }}"
